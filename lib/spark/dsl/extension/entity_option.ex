@@ -5,7 +5,16 @@
 defmodule Spark.Dsl.Extension.EntityOption do
   @moduledoc false
 
-  def value_and_function(value, field, type, caller, modules, no_depend_modules) do
+  def value_and_function(
+        value,
+        field,
+        type,
+        caller,
+        modules,
+        no_depend_modules,
+        lifted_function_transform,
+        context
+      ) do
     value =
       case type do
         :quoted ->
@@ -27,7 +36,18 @@ defmodule Spark.Dsl.Extension.EntityOption do
           value
       end
 
-    Spark.CodeHelpers.lift_functions(value, field, caller)
+    {value, function} = Spark.CodeHelpers.lift_functions(value, field, caller)
+
+    function =
+      Spark.CodeHelpers.transform_lifted_function(
+        function,
+        field,
+        lifted_function_transform,
+        caller,
+        context
+      )
+
+    {value, function}
   end
 
   def set_entity_option(module, key, value, anno \\ nil) do

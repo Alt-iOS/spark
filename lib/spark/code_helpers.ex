@@ -328,6 +328,15 @@ defmodule Spark.CodeHelpers do
   # Ignore all other values.
   def lift_functions(value, _key, _caller), do: {value, nil}
 
+  @doc false
+  def transform_lifted_function(nil, _key, _transform, _caller, _context), do: nil
+
+  def transform_lifted_function(function, _key, nil, _caller, _context), do: function
+
+  def transform_lifted_function(function, key, {module, name, args}, caller, context) do
+    apply(module, name, [function, key, caller, context | args])
+  end
+
   # sobelow_skip ["DOS.BinToAtom"]
   defp generate_unique_function_name(value, key) do
     fn_name = Spark.CodeHelpers.code_identifier(value)

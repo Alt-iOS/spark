@@ -1329,7 +1329,8 @@ defmodule Spark.Dsl.Extension do
     Spark.Dsl.Extension.build_entity_options(
       options_mod_name,
       entity,
-      nested_entity_path
+      nested_entity_path,
+      section_path
     )
 
     args =
@@ -1455,9 +1456,37 @@ defmodule Spark.Dsl.Extension do
                     "Expected an options list in #{entity.name} got #{Macro.to_string(opts)}"
             end
 
+            if Map.get(entity, :lifted_function_transform) do
+              Module.put_attribute(
+                __CALLER__.module,
+                :spark_lifted_function_context,
+                %{
+                  entity_body: opts[:do],
+                  entity_name: entity_name,
+                  section_path: section_path,
+                  nested_entity_path: nested_entity_path
+                }
+              )
+            end
+
             {opts, opt_funs} =
               Enum.reduce(opts, {[], []}, fn {key, value}, {keyword, opt_funs} ->
                 {value, function} = Spark.CodeHelpers.lift_functions(value, key, __CALLER__)
+
+                function =
+                  Spark.CodeHelpers.transform_lifted_function(
+                    function,
+                    key,
+                    Map.get(entity, :lifted_function_transform),
+                    __CALLER__,
+                    %{
+                      entity_name: entity_name,
+                      entity_body: opts[:do],
+                      section_path: section_path,
+                      nested_entity_path: nested_entity_path
+                    }
+                  )
+
                 keyword = [{key, value} | keyword]
 
                 if function do
@@ -1491,6 +1520,20 @@ defmodule Spark.Dsl.Extension do
 
                 {arg_value, new_function} =
                   Spark.CodeHelpers.lift_functions(arg_value, key, __CALLER__)
+
+                new_function =
+                  Spark.CodeHelpers.transform_lifted_function(
+                    new_function,
+                    key,
+                    Map.get(entity, :lifted_function_transform),
+                    __CALLER__,
+                    %{
+                      entity_name: entity_name,
+                      entity_body: opts[:do],
+                      section_path: section_path,
+                      nested_entity_path: nested_entity_path
+                    }
+                  )
 
                 if is_nil(arg_value) &&
                      Enum.any?(
@@ -1569,10 +1612,10 @@ defmodule Spark.Dsl.Extension do
               ])
               |> Spark.Dsl.Extension.Imports.import_solving_conflicts(__CALLER__)
 
+            lifted_functions = Enum.reject(funs ++ opt_funs, &is_nil/1)
+
             code =
               import_statements ++
-                funs ++
-                opt_funs ++
                 [
                   quote generated: true do
                     handle_data =
@@ -1586,6 +1629,7 @@ defmodule Spark.Dsl.Extension do
                       )
 
                     unquote(opts[:do])
+                    unquote_splicing(lifted_functions)
 
                     Spark.Dsl.Extension.Entity.handle(
                       __MODULE__,
@@ -1616,7 +1660,8 @@ defmodule Spark.Dsl.Extension do
   def build_entity_options(
         module_name,
         entity,
-        nested_entity_path
+        nested_entity_path,
+        section_path
       ) do
     entity =
       case entity.recursive_as do
@@ -1632,7 +1677,8 @@ defmodule Spark.Dsl.Extension do
       quote generated: true,
             bind_quoted: [
               entity: Macro.escape(entity),
-              nested_entity_path: nested_entity_path
+              nested_entity_path: nested_entity_path,
+              section_path: section_path
             ] do
         @moduledoc false
 
@@ -1653,7 +1699,16 @@ defmodule Spark.Dsl.Extension do
                 unquote(Macro.escape(config[:type])),
                 __CALLER__,
                 unquote(entity.modules),
-                unquote(entity.no_depend_modules)
+                unquote(entity.no_depend_modules),
+                unquote(Macro.escape(Map.get(entity, :lifted_function_transform))),
+                Map.merge(
+                  %{
+                    entity_name: unquote(entity.name),
+                    section_path: unquote(section_path),
+                    nested_entity_path: unquote(nested_entity_path)
+                  },
+                  Module.get_attribute(__CALLER__.module, :spark_lifted_function_context) || %{}
+                )
               )
 
             key = unquote(key)

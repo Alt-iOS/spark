@@ -71,6 +71,7 @@ defmodule Spark.Dsl.Entity do
     name: nil,
     target: nil,
     transform: nil,
+    lifted_function_transform: nil,
     recursive_as: nil,
     examples: [],
     entities: [],
@@ -135,6 +136,15 @@ defmodule Spark.Dsl.Entity do
   ```
   """
   @type transform :: {module(), function :: atom(), args :: [any()]} | nil
+
+  @typedoc """
+  Transforms a function definition generated from an anonymous function in an entity field.
+
+  The callback receives the generated definition, the field name, the caller environment,
+  and generic entity context, followed by its configured arguments.
+  """
+  @type lifted_function_transform ::
+          {module(), function :: atom(), args :: [any()]} | nil
 
   @typedoc """
   Specifies positional arguments for an Entity.
@@ -224,7 +234,8 @@ defmodule Spark.Dsl.Entity do
           singleton_entity_keys: singleton_entity_keys(),
           snippet: snippet(),
           target: target(),
-          transform: transform()
+          transform: transform(),
+          lifted_function_transform: lifted_function_transform()
         }
 
   @opaque spark_meta() :: %Spark.Dsl.Entity.Meta{

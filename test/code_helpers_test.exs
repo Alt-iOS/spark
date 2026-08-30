@@ -7,6 +7,13 @@ defmodule Spark.CodeHelpersTest do
 
   import Spark.CodeHelpers
 
+  def decorate_lifted_function(function, key, caller, context, marker) do
+    quote do
+      unquote(function)
+      {unquote(marker), unquote(key), unquote(caller.module), unquote(context.entity_name)}
+    end
+  end
+
   test "it generates functions properly when `when` is used in a multi-clausal function" do
     {code, funs} =
       lift_functions(
@@ -35,5 +42,23 @@ defmodule Spark.CodeHelpersTest do
       )
 
     assert :erlang.fun_info(module.fun())[:arity] == 2
+  end
+
+  test "a lifted function can be transformed through a generic entity hook" do
+    function = quote(do: def(run(value), do: value))
+
+    transformed =
+      transform_lifted_function(
+        function,
+        :run,
+        {__MODULE__, :decorate_lifted_function, [:transformed]},
+        __ENV__,
+        %{entity_name: :operation}
+      )
+
+    rendered = Macro.to_string(transformed)
+
+    assert rendered =~ "def run(value)"
+    assert rendered =~ "{:transformed, :run, Spark.CodeHelpersTest, :operation}"
   end
 end
